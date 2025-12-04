@@ -389,3 +389,203 @@ Tạo repository chuẩn clean code cho Node + MSSQL
 👉 Bạn muốn tiếp tục với phần nào?
 
 Bạn có thích tính cách này không
+
+
+
+
+✔ Export hàm trong Node.js
+✔ Import hàm từ file khác
+✔ Export nhiều hàm
+✔ Import toàn bộ hoặc import chọn lọc
+✔ Cách tổ chức project chuẩn (service, controller…)
+
+Mình sẽ hướng dẫn cả 2 cách:
+
+CommonJS (require) – dùng nhiều trong Node.js truyền thống
+
+ESM (import/export) – dùng trong Node >= 18 hoặc "type": "module"
+
+1️⃣ CommonJS (Cách dùng phổ biến trong Node.js)
+✅ A. Export 1 hàm
+📂 file: math.js
+function add(a, b) {
+    return a + b;
+}
+
+module.exports = add;
+
+📂 file: app.js
+const add = require('./math');
+
+console.log(add(5, 10)); // 15
+
+✅ B. Export nhiều hàm cùng lúc
+📂 file: math.js
+function add(a, b) {
+    return a + b;
+}
+
+function sub(a, b) {
+    return a - b;
+}
+
+module.exports = {
+    add,
+    sub
+};
+
+📂 file: app.js
+const { add, sub } = require('./math');
+
+console.log(add(3, 4)); 
+console.log(sub(10, 5));
+
+✅ C. Import toàn bộ module
+app.js
+const math = require('./math');
+
+console.log(math.add(2, 3));
+console.log(math.sub(9, 4));
+
+2️⃣ ES MODULE (import/export)
+
+Dùng khi trong package.json có:
+
+{
+  "type": "module"
+}
+
+
+Hoặc khi chạy React, Next.js, Vite.
+
+✅ A. Export nhiều hàm
+📂 math.js
+export function add(a, b) {
+    return a + b;
+}
+
+export function sub(a, b) {
+    return a - b;
+}
+
+📂 app.js
+import { add, sub } from './math.js';
+
+console.log(add(2, 5));
+console.log(sub(10, 4));
+
+✅ B. Export mặc định
+📂 math.js
+export default function multiply(a, b) {
+    return a * b;
+}
+
+📂 app.js
+import multiply from './math.js';
+
+console.log(multiply(4, 5));
+
+3️⃣ Export + Import trong project thực tế (Node.js + SQL Server)
+
+Ví dụ bạn tách hàm call stored procedure riêng.
+
+📁 Cấu trúc dự án
+project/
+│── config/
+│     └── db.js
+│── services/
+│     └── userService.js
+│── controllers/
+│     └── userController.js
+└── app.js
+
+✅ config/db.js
+const sql = require("mssql");
+
+const config = {
+    user: "sa",
+    password: "123456",
+    server: "localhost",
+    database: "TestDB",
+    options: { encrypt: false, trustServerCertificate: true }
+};
+
+module.exports = config;
+
+✅ services/userService.js
+const sql = require("mssql");
+const config = require("../config/db");
+
+async function getUserById(id) {
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("UserId", sql.Int, id)
+        .execute("GetUserById");
+
+    return result.recordset[0];
+}
+
+async function getAllUsers() {
+    const pool = await sql.connect(config);
+    const result = await pool.request().query("SELECT * FROM Users");
+    return result.recordset;
+}
+
+module.exports = {
+    getUserById,
+    getAllUsers
+};
+
+✅ controllers/userController.js
+const { getUserById, getAllUsers } = require("../services/userService");
+
+async function showUser(req, res) {
+    const id = req.params.id;
+    const user = await getUserById(id);
+    res.json(user);
+}
+
+async function showAll(req, res) {
+    const users = await getAllUsers();
+    res.json(users);
+}
+
+module.exports = {
+    showUser,
+    showAll
+};
+
+✅ app.js (Express server)
+const express = require("express");
+const { showUser, showAll } = require("./controllers/userController");
+
+const app = express();
+
+app.get("/user/:id", showUser);
+app.get("/users", showAll);
+
+app.listen(3000, () => console.log("Server chạy: http://localhost:3000"));
+
+🎯 Tóm lại
+
+Bạn có thể export/import bằng:
+
+✔ CommonJS
+
+module.exports = ...
+
+const x = require('...')
+
+✔ ES Module
+
+export / export default
+
+import x from '...'
+
+✔ Project thực tế: tách module theo
+
+config
+
+service
+
+controller
