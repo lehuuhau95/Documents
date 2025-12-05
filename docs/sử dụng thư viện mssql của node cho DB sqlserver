@@ -1,0 +1,507 @@
+Dưới đây là hướng dẫn đầy đủ – chi tiết – chạy được ngay để bạn kết nối Node.js với SQL Server (MSSQL) bằng thư viện mssql.
+
+✅ 1. Cài đặt môi trường
+Yêu cầu:
+
+Node.js (>= 14)
+
+SQL Server đã chạy (local hoặc remote)
+
+Tài khoản đăng nhập SQL (SQL Authentication hoặc Windows Auth)
+
+✅ 2. Cài thư viện kết nối SQL Server
+
+Trong project Node.js:
+
+npm install mssql
+
+✅ 3. Tạo file cấu hình kết nối
+➤ config/db.js
+const sql = require('mssql');
+
+const config = {
+    user: 'sa',              // Username SQL Server
+    password: 'your_password', // Password
+    database: 'TestDB',      // Tên database
+    server: 'localhost',     // IP hoặc domain server SQL
+    port: 1433,              // Port mặc định của SQL Server
+    options: {
+        encrypt: false,      // Nếu dùng local thì để false
+        trustServerCertificate: true // Bật cho phép SSL tự động
+    }
+};
+
+module.exports = config;
+
+
+🔥 Lưu ý: Nếu bạn dùng SQL Server Express → đổi server: 'localhost\\SQLEXPRESS'.
+
+✅ 4. Tạo file kết nối và chạy thử truy vấn
+➤ test-connection.js
+const sql = require('mssql');
+const config = require('./config/db');
+
+async function testConnection() {
+    try {
+        console.log("🔌 Đang kết nối tới SQL Server...");
+
+        let pool = await sql.connect(config);
+
+        console.log("✅ Kết nối thành công!");
+
+        // Chạy truy vấn thử
+        let result = await pool.request().query("SELECT TOP 10 * FROM Users");
+
+        console.log("📌 Dữ liệu:");
+        console.table(result.recordset);
+
+        sql.close();
+    } catch (err) {
+        console.error("❌ Lỗi kết nối:", err.message);
+    }
+}
+
+testConnection();
+
+✅ 5. Chạy thử
+node test-connection.js
+
+
+Nếu đúng, bạn sẽ thấy:
+
+🔌 Đang kết nối tới SQL Server...
+✅ Kết nối thành công!
+📌 Dữ liệu:
+┌─────────┬──────────────┬───────────────┬───────────┐
+│ (index) │    Id        │    Name       │   Email   │
+└─────────┴──────────────┴───────────────┴───────────┘
+
+🚀 6. Hướng dẫn thực hiện CRUD đầy đủ
+➤ INSERT
+let result = await pool.request()
+    .input('name', sql.NVarChar, 'Nguyễn Văn A')
+    .input('email', sql.NVarChar, 'vana@example.com')
+    .query("INSERT INTO Users (Name, Email) VALUES (@name, @email)");
+
+➤ SELECT có điều kiện
+let result = await pool.request()
+    .input('id', sql.Int, 5)
+    .query("SELECT * FROM Users WHERE Id = @id");
+
+➤ UPDATE
+let result = await pool.request()
+    .input('id', sql.Int, 5)
+    .input('name', sql.NVarChar, "Tên Mới")
+    .query("UPDATE Users SET Name = @name WHERE Id = @id");
+
+➤ DELETE
+let result = await pool.request()
+    .input('id', sql.Int, 5)
+    .query("DELETE FROM Users WHERE Id = @id");
+
+🔥 7. Tạo module SQL để tái sử dụng
+➤ services/db.js
+const sql = require('mssql');
+const config = require('../config/db');
+
+const poolPromise = new sql.ConnectionPool(config)
+    .connect()
+    .then(pool => {
+        console.log("⚡ SQL Server Connected");
+        return pool;
+    })
+    .catch(err => console.log("❌ SQL Connection Failed: ", err));
+
+module.exports = {
+    sql, poolPromise
+};
+
+➤ cách dùng trong file khác:
+const { sql, poolPromise } = require('./services/db');
+
+async function getUsers() {
+    const pool = await poolPromise;
+    const result = await pool.request().query("SELECT * FROM Users");
+    return result.recordset;
+}
+
+📌 8. Lỗi thường gặp & cách fix
+❌ Error: Login failed for user
+
+✔ Sai user/password
+✔ Database không cho phép SQL Authentication
+👉 Mở SQL Management → Properties → Security → enable SQL Server and Windows Authentication mode
+
+❌ ConnectionError: Failed to connect localhost:1433
+
+✔ SQL chưa mở port
+✔ SQL Browser chưa bật
+✔ Firewall chặn 1433
+
+👉 Mở SQL Server Configuration Manager → bật:
+
+TCP/IP
+
+SQL Server Browser
+
+❌ TypeError: sql.connect is not a function
+
+✔ Bạn import sai:
+
+const sql = require('mssql'); // ĐÚNG
+
+🎉 Bạn muốn tôi viết thêm phần nào?
+
+Tôi có thể hỗ trợ:
+
+✔ Kết nối bằng Express API
+✔ Kết nối bằng Sequelize + MSSQL
+✔ Tool tự động backup SQL bằng Node.js
+✔ Tạo RESTful API CRUD đầy đủ
+
+👉 Bạn cần phần nào?
+
+Bạn đã nói:
+tôi muốn chạy câu lệnh query, gọi stored có truyền param
+ChatGPT đã nói:
+
+Ok, dưới đây là hướng dẫn chi tiết – rõ ràng – đầy đủ ví dụ để bạn chạy:
+
+Query thường có truyền tham số
+
+Gọi Stored Procedure có truyền tham số (input + output)
+
+Tất cả dùng thư viện mssql.
+
+✅ 1. Query SQL có truyền tham số
+
+Ví dụ:
+
+SELECT * FROM Users WHERE Id = @id AND Name LIKE @name
+
+➤ Node.js:
+const sql = require("mssql");
+const config = require("./config/db");
+
+async function runQuery() {
+    try {
+        const pool = await sql.connect(config);
+
+        const result = await pool.request()
+            .input("id", sql.Int, 10)
+            .input("name", sql.NVarChar, "%an%")
+            .query("SELECT * FROM Users WHERE Id = @id AND Name LIKE @name");
+
+        console.log(result.recordset);
+    } catch (err) {
+        console.error("❌ Lỗi:", err);
+    }
+}
+
+runQuery();
+
+✅ 2. Gọi Stored Procedure có truyền tham số
+
+Giả sử bạn có SP:
+
+CREATE PROCEDURE GetUserById
+    @UserId INT
+AS
+BEGIN
+    SELECT * FROM Users WHERE Id = @UserId;
+END
+
+➤ Node.js gọi Stored Procedure:
+const sql = require("mssql");
+const config = require("./config/db");
+
+async function callStored() {
+    try {
+        const pool = await sql.connect(config);
+
+        const result = await pool.request()
+            .input("UserId", sql.Int, 5)
+            .execute("GetUserById");
+
+        console.log(result.recordset);
+    } catch (err) {
+        console.error("❌ Lỗi:", err);
+    }
+}
+
+callStored();
+
+✅ 3. Gọi Stored Procedure có Output Parameter
+
+SQL Stored Procedure:
+
+CREATE PROCEDURE CountUsersByRole
+    @RoleId INT,
+    @Total INT OUTPUT
+AS
+BEGIN
+    SELECT @Total = COUNT(*) FROM Users WHERE RoleId = @RoleId;
+END
+
+➤ Node.js xử lý cả input + output:
+const sql = require("mssql");
+const config = require("./config/db");
+
+async function callStoredWithOutput() {
+    try {
+        const pool = await sql.connect(config);
+
+        const request = pool.request();
+
+        request.input("RoleId", sql.Int, 2);
+        request.output("Total", sql.Int);
+
+        const result = await request.execute("CountUsersByRole");
+
+        console.log("Tổng số user:", result.output.Total);
+    } catch (err) {
+        console.error("❌ Lỗi:", err);
+    }
+}
+
+callStoredWithOutput();
+
+✅ 4. Gọi Stored Procedure với nhiều kiểu dữ liệu
+
+Ví dụ SP:
+
+CREATE PROCEDURE InsertUser
+    @Name NVARCHAR(50),
+    @Email NVARCHAR(100),
+    @Age INT,
+    @IsActive BIT
+AS
+BEGIN
+    INSERT INTO Users (Name, Email, Age, IsActive)
+    VALUES (@Name, @Email, @Age, @IsActive);
+END
+
+➤ Node.js:
+await pool.request()
+    .input("Name", sql.NVarChar, "Nguyễn Văn Nam")
+    .input("Email", sql.NVarChar, "nam@example.com")
+    .input("Age", sql.Int, 30)
+    .input("IsActive", sql.Bit, true)
+    .execute("InsertUser");
+
+📌 TÓM LẠI – Bạn có 3 kiểu gọi:
+Tác vụ	Cách
+Query có tham số	.query() + .input()
+Gọi Stored Procedure	.execute("ProcName")
+Stored có OUTPUT	.input() + .output()
+🚀 Bạn muốn tôi viết thêm phần nào?
+
+Tạo API Express để gọi SP
+
+Xử lý transaction (BEGIN – COMMIT – ROLLBACK)
+
+Tạo repository chuẩn clean code cho Node + MSSQL
+
+👉 Bạn muốn tiếp tục với phần nào?
+
+Bạn có thích tính cách này không
+
+
+
+
+✔ Export hàm trong Node.js
+✔ Import hàm từ file khác
+✔ Export nhiều hàm
+✔ Import toàn bộ hoặc import chọn lọc
+✔ Cách tổ chức project chuẩn (service, controller…)
+
+Mình sẽ hướng dẫn cả 2 cách:
+
+CommonJS (require) – dùng nhiều trong Node.js truyền thống
+
+ESM (import/export) – dùng trong Node >= 18 hoặc "type": "module"
+
+1️⃣ CommonJS (Cách dùng phổ biến trong Node.js)
+✅ A. Export 1 hàm
+📂 file: math.js
+function add(a, b) {
+    return a + b;
+}
+
+module.exports = add;
+
+📂 file: app.js
+const add = require('./math');
+
+console.log(add(5, 10)); // 15
+
+✅ B. Export nhiều hàm cùng lúc
+📂 file: math.js
+function add(a, b) {
+    return a + b;
+}
+
+function sub(a, b) {
+    return a - b;
+}
+
+module.exports = {
+    add,
+    sub
+};
+
+📂 file: app.js
+const { add, sub } = require('./math');
+
+console.log(add(3, 4)); 
+console.log(sub(10, 5));
+
+✅ C. Import toàn bộ module
+app.js
+const math = require('./math');
+
+console.log(math.add(2, 3));
+console.log(math.sub(9, 4));
+
+2️⃣ ES MODULE (import/export)
+
+Dùng khi trong package.json có:
+
+{
+  "type": "module"
+}
+
+
+Hoặc khi chạy React, Next.js, Vite.
+
+✅ A. Export nhiều hàm
+📂 math.js
+export function add(a, b) {
+    return a + b;
+}
+
+export function sub(a, b) {
+    return a - b;
+}
+
+📂 app.js
+import { add, sub } from './math.js';
+
+console.log(add(2, 5));
+console.log(sub(10, 4));
+
+✅ B. Export mặc định
+📂 math.js
+export default function multiply(a, b) {
+    return a * b;
+}
+
+📂 app.js
+import multiply from './math.js';
+
+console.log(multiply(4, 5));
+
+3️⃣ Export + Import trong project thực tế (Node.js + SQL Server)
+
+Ví dụ bạn tách hàm call stored procedure riêng.
+
+📁 Cấu trúc dự án
+project/
+│── config/
+│     └── db.js
+│── services/
+│     └── userService.js
+│── controllers/
+│     └── userController.js
+└── app.js
+
+✅ config/db.js
+const sql = require("mssql");
+
+const config = {
+    user: "sa",
+    password: "123456",
+    server: "localhost",
+    database: "TestDB",
+    options: { encrypt: false, trustServerCertificate: true }
+};
+
+module.exports = config;
+
+✅ services/userService.js
+const sql = require("mssql");
+const config = require("../config/db");
+
+async function getUserById(id) {
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("UserId", sql.Int, id)
+        .execute("GetUserById");
+
+    return result.recordset[0];
+}
+
+async function getAllUsers() {
+    const pool = await sql.connect(config);
+    const result = await pool.request().query("SELECT * FROM Users");
+    return result.recordset;
+}
+
+module.exports = {
+    getUserById,
+    getAllUsers
+};
+
+✅ controllers/userController.js
+const { getUserById, getAllUsers } = require("../services/userService");
+
+async function showUser(req, res) {
+    const id = req.params.id;
+    const user = await getUserById(id);
+    res.json(user);
+}
+
+async function showAll(req, res) {
+    const users = await getAllUsers();
+    res.json(users);
+}
+
+module.exports = {
+    showUser,
+    showAll
+};
+
+✅ app.js (Express server)
+const express = require("express");
+const { showUser, showAll } = require("./controllers/userController");
+
+const app = express();
+
+app.get("/user/:id", showUser);
+app.get("/users", showAll);
+
+app.listen(3000, () => console.log("Server chạy: http://localhost:3000"));
+
+🎯 Tóm lại
+
+Bạn có thể export/import bằng:
+
+✔ CommonJS
+
+module.exports = ...
+
+const x = require('...')
+
+✔ ES Module
+
+export / export default
+
+import x from '...'
+
+✔ Project thực tế: tách module theo
+
+config
+
+service
+
+controller
